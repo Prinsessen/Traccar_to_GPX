@@ -23,6 +23,8 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 🪶 Small-jitter filtering - removes tiny stop/start wiggles near the last point
 - 🎯 Stationary point removal - eliminates noise from stationary or barely moving devices
 - ⏱️ Time interval filtering - reduces data density by enforcing minimum time gaps
+- 🎯 Trajectory outlier detection - removes 20-100m jumps that don't match the path
+- ⚡ Quick presets - Ultra Clean, Clean, or Light filtering modes for instant setup
 
 ## Supported Output Formats
 
@@ -63,12 +65,12 @@ The script will guide you through:
 2. **Device Selection** - Choose which device to export data from
 3. **Time Range** - Select the time period for data extraction
 4. **Output Format** - Choose your desired output format
-5. **GPS Accuracy Filtering** - Optional: Remove points with poor GPS fix quality (weak satellite signal)
-6. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
-7. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
-8. **Small-Jitter Filtering** - Optional: Remove tiny stop/start wiggles near the last point
-9. **Stationary Point Removal** - Optional: Remove points with minimal movement (< 5m)
-10. **Time Interval Filtering** - Optional: Keep only points separated by minimum time gap
+5. **Filter Preset** - Choose quick preset or configure filters manually:
+   - **Ultra Clean** - Maximum noise removal (20m accuracy, 30m outliers, 10m stationary)
+   - **Clean (Balanced)** - Good for most cases (30m accuracy, 50m outliers, 5m stationary)
+   - **Light** - Minimal filtering (50m accuracy, 200 km/h jumps only)
+   - **Custom** - Configure each filter individually
+   - **No filtering** - Keep all data
 
 ### Example
 
@@ -232,6 +234,59 @@ Many GPS receivers report an "accuracy" value representing the estimated error r
 - Atmospheric interference
 
 Filtering these points removes the primary source of jitter and noise in your tracks.
+
+## Quick Filter Presets ⚡
+
+For faster setup, the script offers three pre-configured filter combinations:
+
+### Ultra Clean (Aggressive)
+**Best for very noisy GPS data with frequent jumps**
+- GPS Accuracy: 20m
+- Ghost Jumps: 100 km/h
+- Trajectory Outliers: 30m
+- Stationary Points: 10m minimum movement
+- Time Interval: 15 seconds
+
+**Use when:** You have extremely noisy data and need maximum cleanup, even if it means losing some legitimate points.
+
+### Clean (Balanced) ✅ Recommended
+**Best for most use cases**
+- GPS Accuracy: 30m
+- Ghost Jumps: 150 km/h
+- Trajectory Outliers: 50m
+- Stationary Points: 5m minimum movement
+- Time Interval: 10 seconds
+
+**Use when:** You want clean tracks without being too aggressive. Good default for typical GPS tracking.
+
+### Light
+**Best for high-quality GPS data**
+- GPS Accuracy: 50m
+- Ghost Jumps: 200 km/h
+- No trajectory/stationary/time filtering
+
+**Use when:** Your GPS data is already fairly clean and you just want to remove obvious glitches.
+
+## Trajectory Outlier Detection
+
+This powerful filter detects and removes GPS points that deviate significantly from the expected path - perfect for catching those 20-100m jumps that don't match your actual movement.
+
+**How it works:**
+1. Uses a sliding window to analyze the trajectory
+2. Calculates the expected position based on neighboring points
+3. Removes points that deviate too far from the expected path
+4. Preserves the overall track shape while removing outliers
+
+**Recommended thresholds:**
+- **30m** - Aggressive, recommended for very noisy data
+- **50m** - Balanced, good for most cases
+- **75m** - Light filtering for cleaner data
+- **Custom** - Set your own deviation threshold
+- **Disabled** - Keep all points
+
+**Use case:** If your track shows you walking straight but one point jumps 50m to the side (while your speed and direction suggest you kept walking), that outlier is removed while the smooth path is preserved.
+
+**Why it works:** Unlike simple distance filters, this looks at trajectory consistency - a 50m movement is normal if you're actually moving that direction, but abnormal if it's perpendicular to your path.
 
 ## Drift Noise Filtering
 

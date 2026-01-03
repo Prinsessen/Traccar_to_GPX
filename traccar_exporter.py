@@ -640,6 +640,81 @@ def filter_stationary_points(
     return filtered
 
 
+def filter_trajectory_outliers(
+    positions: List[Dict],
+    max_deviation_m: float = 50.0,
+    window_size: int = 5,
+) -> List[Dict]:
+    """Remove points that deviate significantly from the expected trajectory.
+    
+    Uses a sliding window to detect points that jump away from the smooth path.
+    This catches GPS glitches that create sudden deviations.
+    
+    Args:
+        positions: List of position dictionaries
+        max_deviation_m: Maximum allowed deviation in meters (default 50m)
+        window_size: Number of points to consider for trajectory (default 5)
+        
+    Returns:
+        Filtered list without trajectory outliers
+    """
+    if len(positions) <= 3:
+        return positions
+    
+    filtered = [positions[0]]  # Always keep first point
+    removed = 0
+    
+    for i in range(1, len(positions) - 1):
+        curr_pos = positions[i]
+        
+        # Get window of points before and after current point
+        start_idx = max(0, i - window_size // 2)
+        end_idx = min(len(positions), i + window_size // 2 + 1)
+        
+        # Calculate expected position based on neighbors
+        neighbors = []
+        for j in range(start_idx, end_idx):
+            if j != i and positions[j].get('latitude') and positions[j].get('longitude'):
+                neighbors.append(positions[j])
+        
+        if len(neighbors) < 2:
+            filtered.append(curr_pos)
+            continue
+        
+        # Calculate average position of neighbors
+        avg_lat = sum(p.get('latitude', 0) for p in neighbors) / len(neighbors)
+        avg_lon = sum(p.get('longitude', 0) for p in neighbors) / len(neighbors)
+        
+        # Check deviation from expected position
+        curr_lat = curr_pos.get('latitude')
+        curr_lon = curr_pos.get('longitude')
+        
+        if curr_lat is None or curr_lon is None:
+            filtered.append(curr_pos)
+            continue
+        
+        deviation_km = haversine_distance(curr_lat, curr_lon, avg_lat, avg_lon)
+        deviation_m = deviation_km * 1000
+        
+        # Keep point if it's within acceptable deviation
+        if deviation_m <= max_deviation_m:
+            filtered.append(curr_pos)
+        else:
+            removed += 1
+    
+    # Always keep last point
+    if len(positions) > 1:
+        filtered.append(positions[-1])
+    
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} trajectory outlier(s) "
+            f"(deviation > {max_deviation_m} m from expected path)"
+        )
+    
+    return filtered
+
+
 def filter_minimum_time_interval(
     positions: List[Dict],
     min_seconds: int = 10,
@@ -961,6 +1036,48 @@ def select_format() -> Optional[str]:
             return None
 
 
+def ask_filter_preset() -> Optional[str]:
+    """Ask user if they want to use a filter preset.
+    
+    Returns:
+        Preset name ('aggressive', 'balanced', 'light') or 'custom' or None
+    """
+    print("\n" + "="*60)
+    print("FILTER PRESET")
+    print("="*60)
+    print("Choose a filtering preset or configure manually:")
+    print("\n1. Ultra Clean (Aggressive) - Maximum noise removal for very noisy data")
+    print("   • GPS Accuracy: 20m | Ghost Jumps: 100 km/h")
+    print("   • Trajectory Outliers: 30m | Stationary: 10m | Time: 15s")
+    print("\n2. Clean (Balanced) - Good balance for most use cases")
+    print("   • GPS Accuracy: 30m | Ghost Jumps: 150 km/h")
+    print("   • Trajectory Outliers: 50m | Stationary: 5m | Time: 10s")
+    print("\n3. Light - Minimal filtering, keeps most data")
+    print("   • GPS Accuracy: 50m | Ghost Jumps: 200 km/h")
+    print("   • No trajectory/stationary/time filtering")
+    print("\n4. Custom - Configure each filter individually")
+    print("\n5. No filtering - Keep all data (not recommended)")
+    
+    while True:
+        try:
+            choice = input("\nSelect option (1-5): ").strip()
+            if choice == '1':
+                return 'ultra'
+            elif choice == '2':
+                return 'balanced'
+            elif choice == '3':
+                return 'light'
+            elif choice == '4':
+                return 'custom'
+            elif choice == '5':
+                return None
+            else:
+                print("Please enter a number between 1 and 5")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def ask_ghost_jump_filter() -> Optional[float]:
     """Ask user if they want to filter ghost jumps.
     
@@ -1130,6 +1247,51 @@ def ask_gps_accuracy_filter() -> Optional[float]:
             return None
 
 
+def ask_trajectory_outlier_filter() -> Optional[float]:
+    """Ask user if they want to filter trajectory outliers.
+    
+    Returns:
+        Max deviation in meters, or None if disabled
+    """
+    print("\n" + "="*60)
+    print("TRAJECTORY OUTLIER FILTERING")
+    print("="*60)
+    print("Remove points that deviate from the expected path?")
+    print("Catches 20-100m GPS jumps that don't match the trajectory.")
+    print("\n1. Yes - Remove deviations > 30m (aggressive, recommended for noisy data)")
+    print("2. Yes - Remove deviations > 50m (balanced)")
+    print("3. Yes - Remove deviations > 75m (light)")
+    print("4. Custom deviation threshold")
+    print("5. No - Keep all points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-5): ").strip()
+
+            if choice == "1":
+                return 30.0
+            if choice == "2":
+                return 50.0
+            if choice == "3":
+                return 75.0
+            if choice == "4":
+                while True:
+                    try:
+                        deviation = float(input("Max deviation in meters (e.g., 40): ").strip())
+                        if deviation <= 0:
+                            print("Deviation must be positive")
+                            continue
+                        return deviation
+                    except ValueError:
+                        print("Please enter a valid number")
+            if choice == "5":
+                return None
+            print("Please enter a number between 1 and 5")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def ask_stationary_filter() -> Optional[float]:
     """Ask user if they want to remove stationary/duplicate points.
     
@@ -1273,55 +1435,103 @@ def main():
         
         print(f"✓ Retrieved {len(positions)} position records")
         
-        # Ask about GPS accuracy filtering (should be done first)
-        max_accuracy = ask_gps_accuracy_filter()
-        if max_accuracy is not None:
-            print(f"\n🔧 Applying GPS accuracy filter (max accuracy: {max_accuracy} m)...")
-            positions = filter_poor_gps_accuracy(positions, max_accuracy)
-            print(f"✓ {len(positions)} position records after accuracy filtering")
+        # Ask about filter preset
+        preset = ask_filter_preset()
         
-        # Ask about ghost jump filtering
-        max_speed = ask_ghost_jump_filter()
-        if max_speed is not None:
-            print(f"\n🔧 Applying ghost jump filter (max speed: {max_speed} km/h)...")
-            positions = filter_ghost_jumps(positions, max_speed)
-            print(f"✓ {len(positions)} position records after filtering")
+        if preset == 'ultra':
+            print("\n🎯 Applying ULTRA CLEAN preset (aggressive noise removal)...")
+            positions = filter_poor_gps_accuracy(positions, 20.0)
+            print(f"✓ {len(positions)} records after GPS accuracy filter (20m)")
+            positions = filter_ghost_jumps(positions, 100.0)
+            print(f"✓ {len(positions)} records after ghost jump filter (100 km/h)")
+            positions = filter_trajectory_outliers(positions, 30.0)
+            print(f"✓ {len(positions)} records after trajectory outlier filter (30m)")
+            positions = filter_stationary_points(positions, 10.0)
+            print(f"✓ {len(positions)} records after stationary removal (10m)")
+            positions = filter_minimum_time_interval(positions, 15)
+            print(f"✓ {len(positions)} records after time interval filter (15s)")
+            
+        elif preset == 'balanced':
+            print("\n⚖️ Applying CLEAN preset (balanced filtering)...")
+            positions = filter_poor_gps_accuracy(positions, 30.0)
+            print(f"✓ {len(positions)} records after GPS accuracy filter (30m)")
+            positions = filter_ghost_jumps(positions, 150.0)
+            print(f"✓ {len(positions)} records after ghost jump filter (150 km/h)")
+            positions = filter_trajectory_outliers(positions, 50.0)
+            print(f"✓ {len(positions)} records after trajectory outlier filter (50m)")
+            positions = filter_stationary_points(positions, 5.0)
+            print(f"✓ {len(positions)} records after stationary removal (5m)")
+            positions = filter_minimum_time_interval(positions, 10)
+            print(f"✓ {len(positions)} records after time interval filter (10s)")
+            
+        elif preset == 'light':
+            print("\n🌤️ Applying LIGHT preset (minimal filtering)...")
+            positions = filter_poor_gps_accuracy(positions, 50.0)
+            print(f"✓ {len(positions)} records after GPS accuracy filter (50m)")
+            positions = filter_ghost_jumps(positions, 200.0)
+            print(f"✓ {len(positions)} records after ghost jump filter (200 km/h)")
+            
+        elif preset == 'custom':
+            # Ask about GPS accuracy filtering (should be done first)
+            max_accuracy = ask_gps_accuracy_filter()
+            if max_accuracy is not None:
+                print(f"\n🔧 Applying GPS accuracy filter (max accuracy: {max_accuracy} m)...")
+                positions = filter_poor_gps_accuracy(positions, max_accuracy)
+                print(f"✓ {len(positions)} position records after accuracy filtering")
+            
+            # Ask about ghost jump filtering
+            max_speed = ask_ghost_jump_filter()
+            if max_speed is not None:
+                print(f"\n🔧 Applying ghost jump filter (max speed: {max_speed} km/h)...")
+                positions = filter_ghost_jumps(positions, max_speed)
+                print(f"✓ {len(positions)} position records after filtering")
+            
+            # Ask about trajectory outlier filtering
+            max_deviation = ask_trajectory_outlier_filter()
+            if max_deviation is not None:
+                print(f"\n🔧 Applying trajectory outlier filter (max deviation: {max_deviation} m)...")
+                positions = filter_trajectory_outliers(positions, max_deviation)
+                print(f"✓ {len(positions)} position records after outlier filtering")
+            
+            # Ask about low-speed drift filtering
+            drift_opts = ask_drift_filter()
+            if drift_opts is not None:
+                drift_speed, drift_dist = drift_opts
+                print(
+                    f"\n🔧 Applying drift filter (speed <= {drift_speed} km/h, "
+                    f"distance <= {drift_dist*1000:.0f} m)..."
+                )
+                positions = filter_drift_noise(positions, drift_speed, drift_dist)
+                print(f"✓ {len(positions)} position records after drift filtering")
 
-        # Ask about low-speed drift filtering
-        drift_opts = ask_drift_filter()
-        if drift_opts is not None:
-            drift_speed, drift_dist = drift_opts
-            print(
-                f"\n🔧 Applying drift filter (speed <= {drift_speed} km/h, "
-                f"distance <= {drift_dist*1000:.0f} m)..."
-            )
-            positions = filter_drift_noise(positions, drift_speed, drift_dist)
-            print(f"✓ {len(positions)} position records after drift filtering")
-
-        # Ask about small jitter filtering
-        jitter_opts = ask_small_jitter_filter()
-        if jitter_opts is not None:
-            jitter_speed, jitter_dist = jitter_opts
-            print(
-                f"\n🔧 Applying small jitter filter (speed <= {jitter_speed} km/h, "
-                f"distance <= {jitter_dist*1000:.0f} m)..."
-            )
-            positions = filter_small_jitter(positions, jitter_speed, jitter_dist)
-            print(f"✓ {len(positions)} position records after jitter filtering")
+            # Ask about small jitter filtering
+            jitter_opts = ask_small_jitter_filter()
+            if jitter_opts is not None:
+                jitter_speed, jitter_dist = jitter_opts
+                print(
+                    f"\n🔧 Applying small jitter filter (speed <= {jitter_speed} km/h, "
+                    f"distance <= {jitter_dist*1000:.0f} m)..."
+                )
+                positions = filter_small_jitter(positions, jitter_speed, jitter_dist)
+                print(f"✓ {len(positions)} position records after jitter filtering")
+            
+            # Ask about stationary point removal
+            min_movement = ask_stationary_filter()
+            if min_movement is not None:
+                print(f"\n🔧 Removing stationary points (movement < {min_movement} m)...")
+                positions = filter_stationary_points(positions, min_movement)
+                print(f"✓ {len(positions)} position records after stationary removal")
+            
+            # Ask about time interval filtering
+            min_interval = ask_time_interval_filter()
+            if min_interval is not None:
+                print(f"\n🔧 Applying time interval filter (>= {min_interval}s between points)...")
+                positions = filter_minimum_time_interval(positions, min_interval)
+                print(f"✓ {len(positions)} position records after time filtering")
         
-        # Ask about stationary point removal
-        min_movement = ask_stationary_filter()
-        if min_movement is not None:
-            print(f"\n🔧 Removing stationary points (movement < {min_movement} m)...")
-            positions = filter_stationary_points(positions, min_movement)
-            print(f"✓ {len(positions)} position records after stationary removal")
-        
-        # Ask about time interval filtering
-        min_interval = ask_time_interval_filter()
-        if min_interval is not None:
-            print(f"\n🔧 Applying time interval filter (>= {min_interval}s between points)...")
-            positions = filter_minimum_time_interval(positions, min_interval)
-            print(f"✓ {len(positions)} position records after time filtering")
+        # Check if we have enough points left
+        if len(positions) < 2:
+            print("\n⚠ Warning: Very few points remaining after filtering. Track may be incomplete.")
         
         # Export data
         print(f"\nExporting data to {output_format.upper()} format...")
