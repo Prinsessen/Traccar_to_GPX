@@ -17,6 +17,7 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 🎯 Interactive device selection
 - 🌐 Compatible with latest Traccar API
 - 🔧 Ghost jump filtering - removes GPS glitches and unrealistic position jumps
+- 💾 Optional saved credentials for faster reruns
 
 ## Supported Output Formats
 
@@ -53,6 +54,7 @@ python traccar_exporter.py
 
 The script will guide you through:
 1. **Server Connection** - Enter your Traccar server URL and credentials
+	- If credentials are saved locally, you can reuse them or delete/re-enter
 2. **Device Selection** - Choose which device to export data from
 3. **Time Range** - Select the time period for data extraction
 4. **Output Format** - Choose your desired output format
@@ -183,7 +185,8 @@ It uses the following endpoints:
 - Never commit your credentials to version control
 - Use environment variables for production deployments
 - Consider using Traccar API tokens for enhanced security
-- The script does not store credentials; they are only used for the current session
+- By default credentials are not stored; they are only used for the current session
+- Optional local credential storage uses `~/.traccar_exporter/credentials.json` with file mode 600 (user-only)
 
 ## Troubleshooting
 
@@ -225,6 +228,11 @@ Response status: 200
 ```
 
 ## Changelog
+
+### v1.7.0 (2026-01-03) 🔒 Credential Convenience
+- **Added:** Optional local credential storage in `~/.traccar_exporter/credentials.json`
+- **Added:** Reuse/delete prompts for saved credentials
+- **Security:** File permissions set to 600; best-effort warnings on failures
 
 ### v1.6.0 (2026-01-03) 📅 Specific Year Selection
 - **Added:** "Specific year" option - select any year (2000 onwards) for complete annual export

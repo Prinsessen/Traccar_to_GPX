@@ -16,6 +16,8 @@ import sys
 from tqdm import tqdm
 import getpass
 from math import radians, cos, sin, asin, sqrt
+from pathlib import Path
+import os
 
 
 class TraccarExporter:
@@ -423,6 +425,88 @@ def filter_ghost_jumps(positions: List[Dict], max_speed_kmh: float = 200.0) -> L
     return filtered
 
 
+def _credentials_path() -> Path:
+    """Location where credentials are stored securely on disk."""
+    return Path.home() / ".traccar_exporter" / "credentials.json"
+
+
+def load_saved_credentials() -> Optional[tuple]:
+    """Load saved credentials if present.
+    
+    Returns:
+        Tuple (server_url, email, password) or None if not available
+    """
+    path = _credentials_path()
+    if not path.exists():
+        return None
+    try:
+        data = json.loads(path.read_text())
+        server_url = data.get("server_url")
+        email = data.get("email")
+        password = data.get("password")
+        if all([server_url, email, password]):
+            return server_url, email, password
+    except Exception as exc:  # pragma: no cover - best-effort load
+        print(f"⚠ Could not read saved credentials: {exc}")
+    return None
+
+
+def delete_saved_credentials():
+    """Remove saved credentials file if it exists."""
+    path = _credentials_path()
+    try:
+        if path.exists():
+            path.unlink()
+    except Exception as exc:  # pragma: no cover - best-effort cleanup
+        print(f"⚠ Could not delete saved credentials: {exc}")
+
+
+def save_credentials(server_url: str, email: str, password: str):
+    """Persist credentials to disk with restrictive permissions."""
+    path = _credentials_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "server_url": server_url,
+            "email": email,
+            "password": password
+        }
+        path.write_text(json.dumps(payload, indent=2))
+        os.chmod(path, 0o600)
+        print(f"✓ Credentials saved to {path}")
+    except Exception as exc:  # pragma: no cover - best-effort save
+        print(f"⚠ Could not save credentials: {exc}")
+
+
+def ask_use_saved_credentials(saved: tuple) -> Optional[str]:
+    """Prompt user whether to reuse, re-enter, or delete saved credentials."""
+    server_url, email, _ = saved
+    print("\nSaved credentials found:")
+    print(f"- Server: {server_url}")
+    print(f"- Email:  {email}")
+    print("\nOptions:")
+    print("1. Use saved credentials")
+    print("2. Enter new credentials")
+    print("3. Delete saved credentials and enter new")
+    while True:
+        choice = input("Select option (1-3): ").strip()
+        if choice in {"1", "2", "3"}:
+            return choice
+        print("Please enter 1, 2, or 3")
+
+
+def ask_save_credentials(server_url: str, email: str, password: str):
+    """Ask user if credentials should be saved locally."""
+    while True:
+        choice = input("Save credentials for future runs? (y/n): ").strip().lower()
+        if choice in {"y", "yes"}:
+            save_credentials(server_url, email, password)
+            return
+        if choice in {"n", "no"}:
+            return
+        print("Please answer y or n")
+
+
 def get_user_input() -> tuple:
     """Get server connection details from user.
     
@@ -432,15 +516,26 @@ def get_user_input() -> tuple:
     print("\n" + "="*60)
     print("TRACCAR DATA EXPORTER")
     print("="*60 + "\n")
-    
+
+    # Offer saved credentials if available
+    saved = load_saved_credentials()
+    if saved:
+        choice = ask_use_saved_credentials(saved)
+        if choice == "1":
+            return saved
+        if choice == "3":
+            delete_saved_credentials()
+            print("Saved credentials deleted.\n")
+
     server_url = input("Enter Traccar server URL (e.g., https://demo.traccar.org): ").strip()
     if not server_url:
         server_url = "https://demo.traccar.org"
         print(f"Using default: {server_url}")
-    
+
     email = input("Enter your email: ").strip()
     password = getpass.getpass("Enter your password: ")
-    
+
+    ask_save_credentials(server_url, email, password)
     return server_url, email, password
 
 
