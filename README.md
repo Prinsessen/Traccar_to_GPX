@@ -43,8 +43,8 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Prinsessen/Traccar_to_GPX.git
-cd Traccar_to_GPX
+git clone https://github.com/Prinsessen/Traccar-Data-Exporter.git
+cd Traccar-Data-Exporter
 ```
 
 2. Install dependencies:
