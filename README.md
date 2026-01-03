@@ -128,11 +128,11 @@ The script includes comprehensive error handling for:
 ## Traccar API Compatibility
 
 This script is designed to work with Traccar API (v5.x and above). It uses the following endpoints:
-- `/api/session` - Authentication (POST with JSON credentials)
+- `/api/session` - Authentication (POST with form-encoded credentials)
 - `/api/devices` - Device list
 - `/api/positions` - Position data
 
-**Authentication Method:** The script uses POST requests with JSON credentials sent in the request body for secure authentication with Traccar servers.
+**Authentication Method:** The script uses POST requests with form-encoded credentials (not JSON) for compatibility with Traccar's authentication handler.
 
 ## Security Notes
 
@@ -145,14 +145,18 @@ This script is designed to work with Traccar API (v5.x and above). It uses the f
 
 ### Connection Issues
 
-**Problem:** `HTTP 404 Not Found` error on connection
+**Problem:** `HTTP 415 Unsupported Media Type` error
 
-**Solution:** Ensure:
-1. Your server URL format is correct: `https://your-server.com` (without trailing slash)
+**Solution:** The script now correctly sends credentials as form-encoded data. Ensure:
+1. Your server URL is correct: `https://your-server.com` (without trailing slash)
 2. Your email and password are correct
 3. Your Traccar server is accessible from your network
 
-**Example:**
+**Problem:** `HTTP 404 Not Found` error
+
+**Solution:** The script tries both `/api/session/` and `/api/session` endpoints automatically.
+
+**Example URLs:**
 - ✓ Correct: `https://traccar.example.com`
 - ✗ Incorrect: `https://traccar.example.com/`
 
@@ -160,19 +164,23 @@ This script is designed to work with Traccar API (v5.x and above). It uses the f
 
 1. **Invalid Credentials** - Double-check your email and password are correct for your Traccar account
 2. **Server Unreachable** - Verify the server URL and network connectivity
-3. **No Devices Found** - Ensure you have at least one device configured in Traccar
-4. **No Position Data** - The selected time range may not contain any tracking data
+3. **SSL Certificate Warnings** - The script temporarily disables SSL verification for troubleshooting. For production, enable it in the code
+4. **No Devices Found** - Ensure you have at least one device configured in Traccar
+5. **No Position Data** - The selected time range may not contain any tracking data
 
 ## Changelog
 
-### v1.2.0 (2026-01-03)
-- **Fixed:** Authentication method changed from HTTP Basic Auth to POST with JSON credentials
-- **Improved:** More secure credential handling
-- **Updated:** Dependencies and documentation
+### v1.3.0 (2026-01-03)
+- **Fixed:** Authentication now uses form-encoded credentials instead of JSON
+- **Improved:** Better endpoint discovery with fallback logic
+- **Added:** Debug output to show connection attempts
+- **Fixed:** HTTP 415 error by using correct content-type for credentials
+
+### v1.2.0
+- **Fixed:** Authentication method changed from HTTP Basic Auth to POST with credentials
 
 ### v1.1.0
 - **Fixed:** API endpoint URL for session authentication
-- **Improved:** Better error messages for connection troubleshooting
 
 ### v1.0.0
 - Initial release with GPX, KML, KMZ, GeoJSON, and CSV export support
