@@ -18,6 +18,7 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 🌐 Compatible with latest Traccar API
 - 🔧 Ghost jump filtering - removes GPS glitches and unrealistic position jumps
 - 💾 Optional saved credentials for faster reruns
+- 📡 GPS accuracy filtering - removes points with poor satellite fix quality
 - 🧹 Drift noise filtering - removes low-speed jitter during GPS fix acquisition
 - 🪶 Small-jitter filtering - removes tiny stop/start wiggles near the last point
 
@@ -60,9 +61,10 @@ The script will guide you through:
 2. **Device Selection** - Choose which device to export data from
 3. **Time Range** - Select the time period for data extraction
 4. **Output Format** - Choose your desired output format
-5. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
-6. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
-7. **Small-Jitter Filtering** - Optional: Remove tiny stop/start wiggles near the last point
+5. **GPS Accuracy Filtering** - Optional: Remove points with poor GPS fix quality (weak satellite signal)
+6. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
+7. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
+8. **Small-Jitter Filtering** - Optional: Remove tiny stop/start wiggles near the last point
 
 ### Example
 
@@ -106,6 +108,24 @@ OUTPUT FORMAT SELECTION
 5. CSV
 
 Select output format (1-5): 1
+
+GPS ACCURACY FILTERING
+============================================================
+Filter out GPS points with poor accuracy (weak fix)?
+This removes points with low satellite visibility or weak signal.
+
+1. Yes - Remove points with accuracy > 50m (recommended)
+2. Yes - Remove points with accuracy > 30m (stricter)
+3. Yes - Remove points with accuracy > 20m (very strict)
+4. Custom accuracy threshold
+5. No - Keep all points
+
+Select option (1-5): 1
+
+✓ Retrieved 1523 position records
+🔧 Applying GPS accuracy filter (max accuracy: 50.0 m)...
+🔧 Filtered out 12 point(s) with poor GPS accuracy (accuracy > 50.0 m)
+✓ 1511 position records after accuracy filtering
 
 GHOST JUMP FILTERING
 ============================================================
@@ -183,6 +203,31 @@ The script includes a powerful feature to filter out GPS "ghost jumps" - erroneo
 - **Disabled** - Keep all data points unfiltered
 
 **Example:** If your device jumps from New York to London in 5 minutes (clearly impossible), that point will be filtered out.
+
+## GPS Accuracy Filtering
+
+Many GPS receivers report an "accuracy" value representing the estimated error radius in meters. Points with high accuracy values indicate poor satellite visibility, weak signal, or unreliable positioning - often the root cause of jitter and noise.
+
+**How it works:**
+1. Checks the `accuracy` field reported by the GPS receiver
+2. Removes points where accuracy exceeds your threshold
+3. Keeps points without accuracy data (assumes valid)
+4. Always retains at least one point even if all are filtered
+
+**Recommended thresholds:**
+- **50m** - Good balance for most use cases (recommended)
+- **30m** - Stricter filtering for cleaner tracks
+- **20m** - Very strict, best for areas with good GPS coverage
+- **Custom** - Set your own threshold based on requirements
+- **Disabled** - Keep all points regardless of accuracy
+
+**Why filter by accuracy?** Poor GPS fixes (accuracy > 50m) often indicate:
+- Weak satellite signal (urban canyons, indoors, tunnels)
+- Cold start or GPS reacquisition
+- Device hardware limitations
+- Atmospheric interference
+
+Filtering these points removes the primary source of jitter and noise in your tracks.
 
 ## Drift Noise Filtering
 

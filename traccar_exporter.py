@@ -535,6 +535,58 @@ def filter_small_jitter(
     return filtered
 
 
+def filter_poor_gps_accuracy(
+    positions: List[Dict],
+    max_accuracy_m: float = 50.0,
+) -> List[Dict]:
+    """Filter out GPS points with poor accuracy (weak fix).
+
+    GPS receivers report accuracy values representing the estimated error radius.
+    Higher values indicate poor satellite visibility or weak signal, often causing
+    jitter and noise in the data.
+
+    Args:
+        positions: List of position dictionaries
+        max_accuracy_m: Maximum acceptable GPS accuracy in meters (default 50m)
+
+    Returns:
+        Filtered list of positions without poor accuracy points
+    """
+    if len(positions) <= 1:
+        return positions
+
+    filtered = []
+    removed = 0
+
+    for pos in positions:
+        accuracy = pos.get("accuracy")
+        
+        # If accuracy is not reported, we keep the point (assume it's valid)
+        if accuracy is None:
+            filtered.append(pos)
+            continue
+        
+        # Filter out points with accuracy worse than threshold
+        if accuracy > max_accuracy_m:
+            removed += 1
+            continue
+        
+        filtered.append(pos)
+
+    # Always keep at least one point if all were filtered
+    if not filtered and positions:
+        filtered = [positions[0]]
+        removed = len(positions) - 1
+
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} point(s) with poor GPS accuracy "
+            f"(accuracy > {max_accuracy_m} m)"
+        )
+
+    return filtered
+
+
 def _credentials_path() -> Path:
     """Location where credentials are stored securely on disk."""
     return Path.home() / ".traccar_exporter" / "credentials.json"
@@ -932,6 +984,51 @@ def ask_small_jitter_filter() -> Optional[tuple]:
             return None
 
 
+def ask_gps_accuracy_filter() -> Optional[float]:
+    """Ask user if they want to filter points with poor GPS accuracy.
+    
+    Returns:
+        Max acceptable accuracy in meters, or None if disabled
+    """
+    print("\n" + "="*60)
+    print("GPS ACCURACY FILTERING")
+    print("="*60)
+    print("Filter out GPS points with poor accuracy (weak fix)?")
+    print("This removes points with low satellite visibility or weak signal.")
+    print("\n1. Yes - Remove points with accuracy > 50m (recommended)")
+    print("2. Yes - Remove points with accuracy > 30m (stricter)")
+    print("3. Yes - Remove points with accuracy > 20m (very strict)")
+    print("4. Custom accuracy threshold")
+    print("5. No - Keep all points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-5): ").strip()
+
+            if choice == "1":
+                return 50.0
+            if choice == "2":
+                return 30.0
+            if choice == "3":
+                return 20.0
+            if choice == "4":
+                while True:
+                    try:
+                        accuracy = float(input("Max acceptable accuracy in meters (e.g., 25): ").strip())
+                        if accuracy <= 0:
+                            print("Accuracy must be positive")
+                            continue
+                        return accuracy
+                    except ValueError:
+                        print("Please enter a valid number")
+            if choice == "5":
+                return None
+            print("Please enter a number between 1 and 5")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def main():
     """Main function to run the exporter."""
     try:
@@ -984,6 +1081,13 @@ def main():
             sys.exit(0)
         
         print(f"✓ Retrieved {len(positions)} position records")
+        
+        # Ask about GPS accuracy filtering (should be done first)
+        max_accuracy = ask_gps_accuracy_filter()
+        if max_accuracy is not None:
+            print(f"\n🔧 Applying GPS accuracy filter (max accuracy: {max_accuracy} m)...")
+            positions = filter_poor_gps_accuracy(positions, max_accuracy)
+            print(f"✓ {len(positions)} position records after accuracy filtering")
         
         # Ask about ghost jump filtering
         max_speed = ask_ghost_jump_filter()
