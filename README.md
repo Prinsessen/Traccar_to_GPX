@@ -2,6 +2,11 @@
 
 A Python script to export position data from Traccar GPS tracking platform to various popular GPS file formats.
 
+## Author
+
+**Prinsessen**  
+GitHub: [@Prinsessen](https://github.com/Prinsessen)
+
 ## Features
 
 - 🔐 Secure authentication with Traccar server
