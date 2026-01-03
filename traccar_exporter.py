@@ -482,6 +482,59 @@ def filter_drift_noise(
     return filtered
 
 
+def filter_small_jitter(
+    positions: List[Dict],
+    max_speed_kmh: float = 15.0,
+    max_distance_km: float = 0.015,
+) -> List[Dict]:
+    """Filter tiny jumps near the start/stop phases (small displacement, low speed).
+
+    Args:
+        positions: List of position dictionaries
+        max_speed_kmh: Maximum speed considered as jitter (default 15 km/h)
+        max_distance_km: Maximum displacement from last kept point (default 15 m)
+
+    Returns:
+        Filtered list of positions
+    """
+    if len(positions) <= 1:
+        return positions
+
+    filtered = [positions[0]]
+    removed = 0
+
+    for i in range(1, len(positions)):
+        prev_pos = filtered[-1]
+        curr_pos = positions[i]
+
+        prev_lat = prev_pos.get("latitude")
+        prev_lon = prev_pos.get("longitude")
+        curr_lat = curr_pos.get("latitude")
+        curr_lon = curr_pos.get("longitude")
+
+        if None in [prev_lat, prev_lon, curr_lat, curr_lon]:
+            filtered.append(curr_pos)
+            continue
+
+        distance_km = haversine_distance(prev_lat, prev_lon, curr_lat, curr_lon)
+        speed_kmh = curr_pos.get("speed", 0) or 0
+
+        # If the move is tiny and slow, treat as jitter and drop it
+        if distance_km <= max_distance_km and speed_kmh <= max_speed_kmh:
+            removed += 1
+            continue
+
+        filtered.append(curr_pos)
+
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} small-jitter point(s) "
+            f"(distance <= {max_distance_km*1000:.0f} m and speed <= {max_speed_kmh} km/h)"
+        )
+
+    return filtered
+
+
 def _credentials_path() -> Path:
     """Location where credentials are stored securely on disk."""
     return Path.home() / ".traccar_exporter" / "credentials.json"
@@ -841,6 +894,44 @@ def ask_drift_filter() -> Optional[tuple]:
             return None
 
 
+def ask_small_jitter_filter() -> Optional[tuple]:
+    """Ask user if they want to filter tiny low-speed jitter."""
+    print("\n" + "="*60)
+    print("SMALL JITTER FILTERING")
+    print("="*60)
+    print("Remove tiny low-speed jumps (e.g., stop/start jitter)?")
+    print("\n1. Yes - distance <= 15m AND speed <= 15 km/h (recommended)")
+    print("2. Yes - distance <= 10m AND speed <= 12 km/h (stricter)")
+    print("3. Custom thresholds")
+    print("4. No - Keep these points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-4): ").strip()
+
+            if choice == "1":
+                return 15.0, 0.015
+            if choice == "2":
+                return 12.0, 0.010
+            if choice == "3":
+                while True:
+                    try:
+                        max_speed = float(input("Max speed km/h (e.g., 15): ").strip())
+                        max_dist_m = float(input("Max distance meters (e.g., 15): ").strip())
+                        if max_speed <= 0 or max_dist_m <= 0:
+                            print("Values must be positive")
+                            continue
+                        return max_speed, max_dist_m / 1000.0
+                    except ValueError:
+                        print("Please enter valid numbers")
+            if choice == "4":
+                return None
+            print("Please enter a number between 1 and 4")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def main():
     """Main function to run the exporter."""
     try:
@@ -911,6 +1002,17 @@ def main():
             )
             positions = filter_drift_noise(positions, drift_speed, drift_dist)
             print(f"✓ {len(positions)} position records after drift filtering")
+
+        # Ask about small jitter filtering
+        jitter_opts = ask_small_jitter_filter()
+        if jitter_opts is not None:
+            jitter_speed, jitter_dist = jitter_opts
+            print(
+                f"\n🔧 Applying small jitter filter (speed <= {jitter_speed} km/h, "
+                f"distance <= {jitter_dist*1000:.0f} m)..."
+            )
+            positions = filter_small_jitter(positions, jitter_speed, jitter_dist)
+            print(f"✓ {len(positions)} position records after jitter filtering")
         
         # Export data
         print(f"\nExporting data to {output_format.upper()} format...")

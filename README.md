@@ -19,6 +19,7 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 🔧 Ghost jump filtering - removes GPS glitches and unrealistic position jumps
 - 💾 Optional saved credentials for faster reruns
 - 🧹 Drift noise filtering - removes low-speed jitter during GPS fix acquisition
+- 🪶 Small-jitter filtering - removes tiny stop/start wiggles near the last point
 
 ## Supported Output Formats
 
@@ -61,6 +62,7 @@ The script will guide you through:
 4. **Output Format** - Choose your desired output format
 5. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
 6. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
+7. **Small-Jitter Filtering** - Optional: Remove tiny stop/start wiggles near the last point
 
 ### Example
 
@@ -136,7 +138,22 @@ Select option (1-4): 1
 🔧 Applying drift filter (speed <= 10.0 km/h, distance <= 50 m)...
 🔧 Filtered out 4 low-speed drift point(s) (distance <= 50 m and speed <= 10.0 km/h)
 ✓ 1516 position records after drift filtering
-Converting to GPX: 100%|██████████| 1520/1520 [00:02<00:00, 612.45point/s]
+
+SMALL JITTER FILTERING
+============================================================
+Remove tiny low-speed jumps (e.g., stop/start jitter)?
+
+1. Yes - distance <= 15m AND speed <= 15 km/h (recommended)
+2. Yes - distance <= 10m AND speed <= 12 km/h (stricter)
+3. Custom thresholds
+4. No - Keep these points
+
+Select option (1-4): 1
+
+🔧 Applying small jitter filter (speed <= 15.0 km/h, distance <= 15 m)...
+🔧 Filtered out 6 small-jitter point(s) (distance <= 15 m and speed <= 15.0 km/h)
+✓ 1510 position records after jitter filtering
+Converting to GPX: 100%|██████████| 1510/1510 [00:02<00:00, 612.45point/s]
 
 ============================================================
 ✓ SUCCESS!
@@ -180,6 +197,20 @@ The script can remove low-speed GPS drift that happens while a device is station
 - Disabled
 
 **Example:** At startup, GPS may report a few wandering points within 30 m while stopped; these are removed so tracks start cleanly from the true location.
+
+## Small-Jitter Filtering
+
+Targets tiny stop/start wiggles near the last known point (often when pulling away or coming to a stop). It drops points where:
+- Speed is below a modest threshold (e.g., 12–15 km/h)
+- Displacement from the last kept point is tiny (e.g., 10–15 m)
+
+**Presets:**
+- 15 km/h & 15 m (recommended)
+- 12 km/h & 10 m (stricter)
+- Custom thresholds
+- Disabled
+
+**Tip:** Use this after drift filtering to keep starts/stops clean without harming normal low-speed movement.
 
 ## Output File Naming
 
@@ -259,6 +290,11 @@ Response status: 200
 ```
 
 ## Changelog
+
+### v1.9.0 (2026-01-03) 🪶 Small-Jitter Filtering
+- **Added:** Tiny stop/start jitter filter (distance & speed thresholds)
+- **Presets:** 15 km/h & 15 m; 12 km/h & 10 m; custom or disabled
+- **Flow:** Runs after drift filtering; reports removed points
 
 ### v1.8.0 (2026-01-03) 🧹 Drift Noise Filtering
 - **Added:** Low-speed drift filter (distance & speed thresholds) for GPS fix jitter
