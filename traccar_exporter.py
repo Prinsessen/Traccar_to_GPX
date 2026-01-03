@@ -425,6 +425,63 @@ def filter_ghost_jumps(positions: List[Dict], max_speed_kmh: float = 200.0) -> L
     return filtered
 
 
+def filter_drift_noise(
+    positions: List[Dict],
+    max_speed_kmh: float = 10.0,
+    max_distance_km: float = 0.05,
+) -> List[Dict]:
+    """Filter small low-speed GPS drift (e.g., while acquiring fix).
+
+    Removes points where both speed and displacement are very small,
+    which typically indicates GPS jitter rather than real movement.
+
+    Args:
+        positions: List of position dictionaries
+        max_speed_kmh: Maximum speed to consider as drift (default 10 km/h)
+        max_distance_km: Maximum displacement to consider as drift (default 50 m)
+
+    Returns:
+        Filtered list of positions
+    """
+    if len(positions) <= 1:
+        return positions
+
+    filtered = [positions[0]]
+    removed = 0
+
+    for i in range(1, len(positions)):
+        prev_pos = filtered[-1]
+        curr_pos = positions[i]
+
+        prev_lat = prev_pos.get("latitude")
+        prev_lon = prev_pos.get("longitude")
+        curr_lat = curr_pos.get("latitude")
+        curr_lon = curr_pos.get("longitude")
+
+        if None in [prev_lat, prev_lon, curr_lat, curr_lon]:
+            filtered.append(curr_pos)
+            continue
+
+        distance_km = haversine_distance(prev_lat, prev_lon, curr_lat, curr_lon)
+
+        # Time diff isn't critical here; drift often happens while stationary
+        speed_kmh = curr_pos.get("speed", 0) or 0
+
+        if distance_km <= max_distance_km and speed_kmh <= max_speed_kmh:
+            removed += 1
+            continue
+
+        filtered.append(curr_pos)
+
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} low-speed drift point(s) "
+            f"(distance <= {max_distance_km*1000:.0f} m and speed <= {max_speed_kmh} km/h)"
+        )
+
+    return filtered
+
+
 def _credentials_path() -> Path:
     """Location where credentials are stored securely on disk."""
     return Path.home() / ".traccar_exporter" / "credentials.json"
@@ -742,6 +799,48 @@ def ask_ghost_jump_filter() -> Optional[float]:
             return None
 
 
+def ask_drift_filter() -> Optional[tuple]:
+    """Ask user if they want to filter low-speed drift noise.
+
+    Returns:
+        Tuple (max_speed_kmh, max_distance_km) or None if disabled
+    """
+    print("\n" + "="*60)
+    print("DRIFT NOISE FILTERING")
+    print("="*60)
+    print("Filter low-speed jitter (e.g., while GPS fix is acquired)?")
+    print("\n1. Yes - distance <= 50m AND speed <= 10 km/h")
+    print("2. Yes - distance <= 30m AND speed <= 8 km/h")
+    print("3. Custom thresholds")
+    print("4. No - Keep all low-speed points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-4): ").strip()
+
+            if choice == "1":
+                return 10.0, 0.05
+            if choice == "2":
+                return 8.0, 0.03
+            if choice == "3":
+                while True:
+                    try:
+                        max_speed = float(input("Max speed km/h (e.g., 10): ").strip())
+                        max_dist_m = float(input("Max distance meters (e.g., 50): ").strip())
+                        if max_speed <= 0 or max_dist_m <= 0:
+                            print("Values must be positive")
+                            continue
+                        return max_speed, max_dist_m / 1000.0
+                    except ValueError:
+                        print("Please enter valid numbers")
+            if choice == "4":
+                return None
+            print("Please enter a number between 1 and 4")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def main():
     """Main function to run the exporter."""
     try:
@@ -801,6 +900,17 @@ def main():
             print(f"\n🔧 Applying ghost jump filter (max speed: {max_speed} km/h)...")
             positions = filter_ghost_jumps(positions, max_speed)
             print(f"✓ {len(positions)} position records after filtering")
+
+        # Ask about low-speed drift filtering
+        drift_opts = ask_drift_filter()
+        if drift_opts is not None:
+            drift_speed, drift_dist = drift_opts
+            print(
+                f"\n🔧 Applying drift filter (speed <= {drift_speed} km/h, "
+                f"distance <= {drift_dist*1000:.0f} m)..."
+            )
+            positions = filter_drift_noise(positions, drift_speed, drift_dist)
+            print(f"✓ {len(positions)} position records after drift filtering")
         
         # Export data
         print(f"\nExporting data to {output_format.upper()} format...")

@@ -18,6 +18,7 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 🌐 Compatible with latest Traccar API
 - 🔧 Ghost jump filtering - removes GPS glitches and unrealistic position jumps
 - 💾 Optional saved credentials for faster reruns
+- 🧹 Drift noise filtering - removes low-speed jitter during GPS fix acquisition
 
 ## Supported Output Formats
 
@@ -59,6 +60,7 @@ The script will guide you through:
 3. **Time Range** - Select the time period for data extraction
 4. **Output Format** - Choose your desired output format
 5. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
+6. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
 
 ### Example
 
@@ -119,6 +121,21 @@ Select option (1-4): 1
 🔧 Applying ghost jump filter (max speed: 200.0 km/h)...
 🔧 Filtered out 3 ghost jump(s) (speed > 200.0 km/h)
 ✓ 1520 position records after filtering
+
+DRIFT NOISE FILTERING
+============================================================
+Filter low-speed jitter (e.g., while GPS fix is acquired)?
+
+1. Yes - distance <= 50m AND speed <= 10 km/h
+2. Yes - distance <= 30m AND speed <= 8 km/h
+3. Custom thresholds
+4. No - Keep all low-speed points
+
+Select option (1-4): 1
+
+🔧 Applying drift filter (speed <= 10.0 km/h, distance <= 50 m)...
+🔧 Filtered out 4 low-speed drift point(s) (distance <= 50 m and speed <= 10.0 km/h)
+✓ 1516 position records after drift filtering
 Converting to GPX: 100%|██████████| 1520/1520 [00:02<00:00, 612.45point/s]
 
 ============================================================
@@ -149,6 +166,20 @@ The script includes a powerful feature to filter out GPS "ghost jumps" - erroneo
 - **Disabled** - Keep all data points unfiltered
 
 **Example:** If your device jumps from New York to London in 5 minutes (clearly impossible), that point will be filtered out.
+
+## Drift Noise Filtering
+
+The script can remove low-speed GPS drift that happens while a device is stationary and acquiring a fix. It drops points where both:
+- Speed is below a small threshold (e.g., 8–10 km/h)
+- Displacement from the previous kept point is tiny (e.g., 30–50 m)
+
+**Presets:**
+- 10 km/h & 50 m (recommended default)
+- 8 km/h & 30 m (stricter)
+- Custom thresholds
+- Disabled
+
+**Example:** At startup, GPS may report a few wandering points within 30 m while stopped; these are removed so tracks start cleanly from the true location.
 
 ## Output File Naming
 
@@ -228,6 +259,11 @@ Response status: 200
 ```
 
 ## Changelog
+
+### v1.8.0 (2026-01-03) 🧹 Drift Noise Filtering
+- **Added:** Low-speed drift filter (distance & speed thresholds) for GPS fix jitter
+- **Presets:** 10 km/h & 50 m; 8 km/h & 30 m; custom or disabled
+- **Flow:** Prompted after ghost jump filtering, with summary of removed points
 
 ### v1.7.0 (2026-01-03) 🔒 Credential Convenience
 - **Added:** Optional local credential storage in `~/.traccar_exporter/credentials.json`
