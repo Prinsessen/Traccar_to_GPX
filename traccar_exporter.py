@@ -587,6 +587,107 @@ def filter_poor_gps_accuracy(
     return filtered
 
 
+def filter_stationary_points(
+    positions: List[Dict],
+    min_distance_m: float = 5.0,
+) -> List[Dict]:
+    """Remove consecutive stationary points (duplicate locations).
+    
+    Keeps only points that have moved at least min_distance_m from the last kept point.
+    This aggressively removes GPS noise when the device is stationary or barely moving.
+    
+    Args:
+        positions: List of position dictionaries
+        min_distance_m: Minimum movement in meters to keep a point (default 5m)
+        
+    Returns:
+        Filtered list with stationary points removed
+    """
+    if len(positions) <= 1:
+        return positions
+    
+    filtered = [positions[0]]
+    removed = 0
+    
+    for i in range(1, len(positions)):
+        prev_pos = filtered[-1]
+        curr_pos = positions[i]
+        
+        prev_lat = prev_pos.get("latitude")
+        prev_lon = prev_pos.get("longitude")
+        curr_lat = curr_pos.get("latitude")
+        curr_lon = curr_pos.get("longitude")
+        
+        if None in [prev_lat, prev_lon, curr_lat, curr_lon]:
+            filtered.append(curr_pos)
+            continue
+        
+        distance_km = haversine_distance(prev_lat, prev_lon, curr_lat, curr_lon)
+        distance_m = distance_km * 1000
+        
+        # Only keep if moved at least min_distance_m
+        if distance_m >= min_distance_m:
+            filtered.append(curr_pos)
+        else:
+            removed += 1
+    
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} stationary point(s) "
+            f"(movement < {min_distance_m} m)"
+        )
+    
+    return filtered
+
+
+def filter_minimum_time_interval(
+    positions: List[Dict],
+    min_seconds: int = 10,
+) -> List[Dict]:
+    """Keep only points separated by at least min_seconds.
+    
+    Reduces data density by ensuring minimum time gaps between points.
+    Useful for removing high-frequency noise and reducing file size.
+    
+    Args:
+        positions: List of position dictionaries
+        min_seconds: Minimum time interval in seconds between points (default 10s)
+        
+    Returns:
+        Filtered list with time-based downsampling
+    """
+    if len(positions) <= 1:
+        return positions
+    
+    filtered = [positions[0]]
+    removed = 0
+    
+    for i in range(1, len(positions)):
+        prev_pos = filtered[-1]
+        curr_pos = positions[i]
+        
+        try:
+            prev_time = datetime.fromisoformat(prev_pos.get('fixTime', '').replace('Z', '+00:00'))
+            curr_time = datetime.fromisoformat(curr_pos.get('fixTime', '').replace('Z', '+00:00'))
+            time_diff_seconds = (curr_time - prev_time).total_seconds()
+            
+            # Only keep if enough time has passed
+            if time_diff_seconds >= min_seconds:
+                filtered.append(curr_pos)
+            else:
+                removed += 1
+        except (ValueError, AttributeError):
+            # If time parsing fails, keep the point
+            filtered.append(curr_pos)
+    
+    if removed > 0:
+        print(
+            f"🔧 Filtered out {removed} point(s) with time interval < {min_seconds}s"
+        )
+    
+    return filtered
+
+
 def _credentials_path() -> Path:
     """Location where credentials are stored securely on disk."""
     return Path.home() / ".traccar_exporter" / "credentials.json"
@@ -1029,6 +1130,96 @@ def ask_gps_accuracy_filter() -> Optional[float]:
             return None
 
 
+def ask_stationary_filter() -> Optional[float]:
+    """Ask user if they want to remove stationary/duplicate points.
+    
+    Returns:
+        Minimum movement distance in meters, or None if disabled
+    """
+    print("\n" + "="*60)
+    print("STATIONARY POINT REMOVAL")
+    print("="*60)
+    print("Remove points where device hasn't moved significantly?")
+    print("This aggressively removes GPS noise when stationary.")
+    print("\n1. Yes - Remove if movement < 5m (recommended for cleaner tracks)")
+    print("2. Yes - Remove if movement < 10m (moderate)")
+    print("3. Yes - Remove if movement < 3m (very aggressive)")
+    print("4. Custom distance threshold")
+    print("5. No - Keep all points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-5): ").strip()
+
+            if choice == "1":
+                return 5.0
+            if choice == "2":
+                return 10.0
+            if choice == "3":
+                return 3.0
+            if choice == "4":
+                while True:
+                    try:
+                        distance = float(input("Min movement in meters (e.g., 5): ").strip())
+                        if distance <= 0:
+                            print("Distance must be positive")
+                            continue
+                        return distance
+                    except ValueError:
+                        print("Please enter a valid number")
+            if choice == "5":
+                return None
+            print("Please enter a number between 1 and 5")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
+def ask_time_interval_filter() -> Optional[int]:
+    """Ask user if they want to enforce minimum time intervals.
+    
+    Returns:
+        Minimum seconds between points, or None if disabled
+    """
+    print("\n" + "="*60)
+    print("TIME INTERVAL FILTERING")
+    print("="*60)
+    print("Keep only points separated by minimum time interval?")
+    print("Reduces noise and file size by limiting data frequency.")
+    print("\n1. Yes - Keep points >= 10 seconds apart (good balance)")
+    print("2. Yes - Keep points >= 30 seconds apart (aggressive)")
+    print("3. Yes - Keep points >= 5 seconds apart (light filtering)")
+    print("4. Custom time interval")
+    print("5. No - Keep all points")
+
+    while True:
+        try:
+            choice = input("\nSelect option (1-5): ").strip()
+
+            if choice == "1":
+                return 10
+            if choice == "2":
+                return 30
+            if choice == "3":
+                return 5
+            if choice == "4":
+                while True:
+                    try:
+                        seconds = int(input("Min seconds between points (e.g., 10): ").strip())
+                        if seconds <= 0:
+                            print("Seconds must be positive")
+                            continue
+                        return seconds
+                    except ValueError:
+                        print("Please enter a valid number")
+            if choice == "5":
+                return None
+            print("Please enter a number between 1 and 5")
+        except KeyboardInterrupt:
+            print("\nOperation cancelled")
+            return None
+
+
 def main():
     """Main function to run the exporter."""
     try:
@@ -1117,6 +1308,20 @@ def main():
             )
             positions = filter_small_jitter(positions, jitter_speed, jitter_dist)
             print(f"✓ {len(positions)} position records after jitter filtering")
+        
+        # Ask about stationary point removal
+        min_movement = ask_stationary_filter()
+        if min_movement is not None:
+            print(f"\n🔧 Removing stationary points (movement < {min_movement} m)...")
+            positions = filter_stationary_points(positions, min_movement)
+            print(f"✓ {len(positions)} position records after stationary removal")
+        
+        # Ask about time interval filtering
+        min_interval = ask_time_interval_filter()
+        if min_interval is not None:
+            print(f"\n🔧 Applying time interval filter (>= {min_interval}s between points)...")
+            positions = filter_minimum_time_interval(positions, min_interval)
+            print(f"✓ {len(positions)} position records after time filtering")
         
         # Export data
         print(f"\nExporting data to {output_format.upper()} format...")

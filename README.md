@@ -21,6 +21,8 @@ GitHub: [@Prinsessen](https://github.com/Prinsessen)
 - 📡 GPS accuracy filtering - removes points with poor satellite fix quality
 - 🧹 Drift noise filtering - removes low-speed jitter during GPS fix acquisition
 - 🪶 Small-jitter filtering - removes tiny stop/start wiggles near the last point
+- 🎯 Stationary point removal - eliminates noise from stationary or barely moving devices
+- ⏱️ Time interval filtering - reduces data density by enforcing minimum time gaps
 
 ## Supported Output Formats
 
@@ -65,6 +67,8 @@ The script will guide you through:
 6. **Ghost Jump Filtering** - Optional: Filter out GPS glitches and unrealistic position jumps
 7. **Drift Noise Filtering** - Optional: Remove low-speed jitter while device acquires GPS fix
 8. **Small-Jitter Filtering** - Optional: Remove tiny stop/start wiggles near the last point
+9. **Stationary Point Removal** - Optional: Remove points with minimal movement (< 5m)
+10. **Time Interval Filtering** - Optional: Keep only points separated by minimum time gap
 
 ### Example
 
@@ -256,6 +260,44 @@ Targets tiny stop/start wiggles near the last known point (often when pulling aw
 - Disabled
 
 **Tip:** Use this after drift filtering to keep starts/stops clean without harming normal low-speed movement.
+
+## Stationary Point Removal
+
+This powerful filter removes consecutive points where the device hasn't moved significantly, which is especially effective at eliminating GPS noise when stationary or nearly stationary.
+
+**How it works:**
+1. Compares each point to the last kept point
+2. Only keeps points that have moved at least the minimum distance
+3. Aggressively removes jitter/noise from stationary periods
+
+**Recommended thresholds:**
+- **5m** - Recommended for cleaner tracks, removes most stationary noise
+- **10m** - Moderate filtering, keeps more data
+- **3m** - Very aggressive, best for high-precision tracks
+- **Custom** - Set your own minimum movement distance
+- **Disabled** - Keep all points
+
+**Use case:** If your GPS reports 20 points within a 3-meter radius while parked, this filter keeps only the first point, eliminating the noise cloud.
+
+## Time Interval Filtering
+
+Enforces a minimum time gap between consecutive points, reducing data density and file size while maintaining track shape. Particularly useful for high-frequency GPS loggers.
+
+**How it works:**
+1. Keeps the first point always
+2. For subsequent points, only keeps if enough time has passed since the last kept point
+3. Temporal downsampling without losing track quality
+
+**Recommended intervals:**
+- **10 seconds** - Good balance between detail and noise reduction
+- **30 seconds** - Aggressive filtering for long trips, smaller files
+- **5 seconds** - Light filtering for detailed tracks
+- **Custom** - Set your own interval
+- **Disabled** - Keep all points
+
+**Use case:** If your device logs every second but you only need one point every 10 seconds, this drastically reduces noise and file size while preserving the overall track shape.
+
+**Tip:** Combine with stationary point removal for maximum noise reduction - first remove stationary points, then apply time interval filtering to reduce data density during movement.
 
 ## Output File Naming
 
