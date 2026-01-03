@@ -495,11 +495,12 @@ def get_time_range() -> Optional[tuple]:
     print("4. Last 30 days")
     print("5. Current year")
     print("6. Last year")
-    print("7. Custom range")
+    print("7. Specific year")
+    print("8. Custom range")
     
     while True:
         try:
-            choice = input("\nSelect time range (1-7): ").strip()
+            choice = input("\nSelect time range (1-8): ").strip()
             
             end_time = datetime.utcnow()
             
@@ -527,6 +528,21 @@ def get_time_range() -> Optional[tuple]:
                 end_time = datetime(last_year, 12, 31, 23, 59, 59)
                 break
             elif choice == '7':
+                # Specific year
+                while True:
+                    try:
+                        year_input = input("Enter year (e.g., 2023, 2024): ").strip()
+                        year = int(year_input)
+                        if 2000 <= year <= datetime.utcnow().year:
+                            start_time = datetime(year, 1, 1, 0, 0, 0)
+                            end_time = datetime(year, 12, 31, 23, 59, 59)
+                            break
+                        else:
+                            print(f"Please enter a year between 2000 and {datetime.utcnow().year}")
+                    except ValueError:
+                        print("Please enter a valid year")
+                break
+            elif choice == '8':
                 print("\nEnter dates in format: YYYY-MM-DD HH:MM")
                 start_str = input("Start date and time: ").strip()
                 end_str = input("End date and time: ").strip()
@@ -543,7 +559,7 @@ def get_time_range() -> Optional[tuple]:
                     print(f"Invalid date format: {e}")
                     continue
             else:
-                print("Please enter a number between 1 and 7")
+                print("Please enter a number between 1 and 8")
         except KeyboardInterrupt:
             print("\nOperation cancelled")
             return None
